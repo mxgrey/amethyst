@@ -3,8 +3,12 @@
 use amethyst::{
     assets::{PrefabLoader, PrefabLoaderSystemDesc, Processor, RonFormat},
     audio::{output::init_output, Source},
-    core::{frame_limiter::FrameRateLimitStrategy, transform::TransformBundle, Time},
-    ecs::{Entity, System, Write},
+    core::{
+        frame_limiter::FrameRateLimitStrategy,
+        transform::TransformBundle,
+        Time
+    },
+    ecs::*,
     input::{is_close_requested, is_key_down, InputBundle},
     prelude::*,
     renderer::{
@@ -39,7 +43,8 @@ struct Example {
 
 impl SimpleState for Example {
     fn on_start(&mut self, data: StateData<'_, GameData>) {
-        let StateData { mut world, .. } = data;
+        let world = data.world;
+        let resources = data.resources;
 
         // Make a button using the UiButtonBuilder.
         let (_button_id, _label) =
@@ -50,7 +55,7 @@ impl SimpleState for Example {
                 .with_anchor(Anchor::TopMiddle)
                 .with_image(UiImage::SolidColor([0.8, 0.6, 0.3, 1.0]))
                 .with_hover_image(UiImage::SolidColor([0.1, 0.1, 0.1, 0.5]))
-                .build_from_world(&world);
+                .build_from_world_and_resources(&mut world, &mut resources);
 
         // initialize the scene with an object, a light and a camera.
         let handle = world.exec(|loader: PrefabLoader<'_, MyPrefabData>| {
@@ -177,13 +182,21 @@ impl UiEventHandlerSystem {
     }
 }
 
-impl<'a> System for UiEventHandlerSystem {
-    type SystemData = Write<'a, EventChannel<UiEvent>>;
-
-    fn run(&mut self, events: Self::SystemData) {
-        // Reader id was just initialized above if empty
-        for ev in events.read(&mut self.reader_id) {
-            info!("[SYSTEM] You just interacted with a ui element: {:?}", ev);
-        }
+impl System for UiEventHandlerSystem {
+    fn build(mut self) -> Box<dyn ParallelRunnable> {
+        Box::new(
+            SystemBuilder::new("UiEventHandlerSystem")
+                .write_resource::<EventChannel<UiEvent>>()
+                .build(
+                    move |commands,
+                          world,
+                          events,
+                          ()| {
+                              for ev in events.read(&mut self.reader_id) {
+                                  info!("[SYSTEM] You just interacted with a ui element: {:?}", ev);
+                              }
+                          }
+                )
+        )
     }
 }
